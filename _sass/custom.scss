@@ -1,0 +1,52 @@
+.custom_wrapper{
+    display: grid;
+    grid-template-columns: repeat(9, 1fr);
+    grid-template-rows: 1fr 1fr;
+    justify-items: center;
+    align-content: center;
+    column-gap: 2px;
+}
+.sign{
+    color:goldenrod;  
+}
+.exponent{
+    color: green;
+}
+.mantissa{
+    color: red;
+}
+.sign_label{
+    color:goldenrod; 
+    grid-row: 1/1;
+    grid-column: 1/1;
+}
+.exponent_label{
+    color: green;
+    grid-row: 1/1;
+    grid-column: 2/5;
+}
+.mantissa_label{
+    color: red;
+    grid-row: 1/1;
+    grid-column: 4/10;
+}
+.bits{
+    border: gray;
+    border-style: dotted;
+    width: 100%;
+    grid-row: 2/3;
+    text-align: center;
+}
+.bits.container_1{
+    color:goldenrod; 
+    width: auto;
+}
+.bits.container_2{
+    color: green;
+}
+.bits.container_3{
+    color: red;
+}
+.bits.formula{
+    border-style: none;
+}

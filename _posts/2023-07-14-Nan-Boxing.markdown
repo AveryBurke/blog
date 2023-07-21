@@ -18,13 +18,41 @@ A NaN is a special case of a floating-point number. So first we should review th
 
 A double is an 8 byte (64 bit) representation of a floating point number.  I hereby submit my contribution to the already voluminous corpus of illustrations of [IEEE 754 standard for representing a double precision floating-point number](https://en.wikipedia.org/wiki/Double-precision_floating-point_format): 
 
-// something goes here // 
+<figure class="highlight">
+    <pre>
+        <div style="display: flex; align-items: center;">
+            <div class="custom_wrapper">
+                <div class="sign_label"><span>sign</span></div>
+                <div class="exponent_label"><span>exponent</span></div>
+                <div class="mantissa_label"><span>mantissa</span></div>
+                <div class="bits container_1"><span>s</span></div>
+                <div class="bits container_2"><span>eeeeeee</span></div>
+                <div class="bits container_2"><span>eeeeeeee</span></div>
+                <div class="bits container_2"><span>eeeeeeee</span></div>
+                <div class="bits container_3"><span>mmmmmmmm</span></div>
+                <div class="bits container_3"><span>mmmmmmmm</span></div>
+                <div class="bits container_3"><span>mmmmmmmm</span></div>
+                <div class="bits container_3"><span>mmmmmmmm</span></div>
+                <div class="bits formula"><span> = (-1)<sup><span class="sign">s</span></sup> * <span class="mantissa">m</span><sup><span class="exponent">e</span></sup></span></div>
+            </div>
+        </div>
+    </pre>
+</figure>
 
-Going from left to right, the first bit is the sign bit, which signals weather the number is positive or negative. The next 11 bits are the exponent bits. The exponent is [biased]( https://en.wikipedia.org/wiki/Exponent_bias). This is both an ad hominem attack against the exponent and a standard for encoding exponents with either negative or positive values.  An 11 bit biased exponent can represent a number between −1022 and +1023, but is should be never be allowed to server on a jury.  The remaining 52 bits are the *mantissa*. And for those of us interested in optimizing run time type checking, that’s where the magic happens.
+Going from left to right, the first bit is the <span class="sign">*sign bit*</span>, which signals weather the number is positive or negative. The next 11 bits are the <span class="exponent">*exponent bits*</span>. The exponent is [biased]( https://en.wikipedia.org/wiki/Exponent_bias). This is both an ad hominem attack against the exponent and a standard for encoding exponents with either negative or positive values.  An 11 bit biased exponent can represent a number between −1022 and +1023, but is should be never be allowed to server on a jury.  The remaining 52 bits are the <span class="mantissa">*mantissa*</span>. And for those of us interested in optimizing run time type checking, that’s where the magic happens.
 
 Some examples of doubles:
+<figure class="highlight">
+    <pre>
+    <span><span class="sign">0</span> <span class="exponent">01111111111</span> <span class="mantissa">0000000000000000000000000000000000000000000000000000</span> = 1</span>
+    <span><span class="sign">1</span> <span class="exponent">10000000000</span> <span class="mantissa">0000000000000000000000000000000000000000000000000000</span> = -2</span>
+    <span><span class="sign">0</span> <span class="exponent">01111111000</span> <span class="mantissa">1000000000000000000000000000000000000000000000000000</span> = 0.01171875</span>
+    <span><span class="sign">0</span> <span class="exponent">111111111</span> <span class="mantissa">1000000000000000000000000000000000000000000000000000</span> = NaN</span>
+    <span><span class="sign">0</span> <span class="exponent">111111111</span> <span class="mantissa">1000000000000000100000000000000000100000000000000000</span> = NaN</span>
+    <span><span class="sign">1</span> <span class="exponent">111111111</span> <span class="mantissa">1111100000000000000000000000000000000000000000000000</span> = NaN</span>
+</pre>
+</figure>
 
-//example goes here the last few should be NaN//
 
 As you can see from these examples NaNs are not unique.  Any double whose exponent bits are all 1s is treated as a NaN.  
 
