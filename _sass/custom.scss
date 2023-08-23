@@ -1,10 +1,46 @@
+$dun: #E8D2B1ff;
+$platinum: #EBEBE8ff;
+$sandy-brown: #F1A771ff;
+$flame: #E96838ff;
+$cambridge-blue: #6EA69Dff;
+$indigo-dye: #0B3D64ff;
+
+a{
+    color: $sandy-brown;
+}
+
+a:hover{
+    color: $flame;
+}
+a:visited{
+    color: $flame
+}
+.site-title, .site-title:visited{
+    color: $platinum;
+}
+
+.highlighter-rouge .highlight{
+    color: #111;
+    background: $platinum;
+}
+
+code{
+    color: #111;
+    background: $platinum;
+}
+pre{
+    color: #111;
+    background: $platinum;
+}
+
 .custom_wrapper{
     display: grid;
-    grid-template-columns: repeat(9, 1fr);
+    grid-template-columns: repeat(13, 1fr);
     grid-template-rows: 1fr 1fr;
     justify-items: center;
     align-content: center;
     column-gap: 2px;
+    font-size: .9em;
 }
 .sign{
     color:goldenrod;  
@@ -15,6 +51,12 @@
 .mantissa{
     color: red;
 }
+.tag{
+    color:$cambridge-blue
+}
+.q_bit{
+    color: blue;
+}
 .sign_label{
     color:goldenrod; 
     grid-row: 1/1;
@@ -23,12 +65,23 @@
 .exponent_label{
     color: green;
     grid-row: 1/1;
-    grid-column: 2/5;
+    grid-column: 1/4;
 }
 .mantissa_label{
     color: red;
     grid-row: 1/1;
     grid-column: 4/10;
+}
+.tag_label{
+    color:$cambridge-blue;
+    grid-row: 1/1;
+    grid-column: 1/6;
+}
+.q_bit_label{
+    color:blue;
+    grid-row: 3/3;
+    grid-column: 2/5;
+    margin-top: .2em;
 }
 .bits{
     border: gray;
