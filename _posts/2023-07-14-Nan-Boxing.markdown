@@ -10,7 +10,7 @@ If you type check at runtime you need a way to store type data as tokens are par
 
 "NaN" is an abbreviation for "not a number". Most programming languages support [IEEE 754 double precision floating point numbers](https://en.wikipedia.org/wiki/Double-precision_floating-point_format) [doubles], which is a format with well-defined operations supported directly on modern CPUs. NaN is a special value in doubles that usually turns up when you do weird math, like divide infinity by a number.
 
-NaN Boxing works by storing data in the unused bits of NaN. By the way, NaN has unused bits. The idea is that every value can be a double. Doubles can be read directly and all the other types are NaN, the special double value. And NaN can store the type of a value and store some information about that value. Before I go into further detail it will be helpful to know a little more about how doubles are represented internally.
+NaN Boxing works by storing data in the unused bits of NaN. By the way, NaN has unused bits. The idea is that every value can be a double. Valid doubles can be read directly and all the other types are NaN, the special double value. And NaN can store the type of a value and store some information about that value. Before I go into further detail it will be helpful to know a little more about how doubles are represented internally.
 
 # The anatomy of a double
 
