@@ -10,11 +10,11 @@ If you type check at runtime you need a way to store type data as tokens are par
 
 "NaN" is an abbreviation for "not a number". Most programming languages support [IEEE 754 double precision floating point numbers](https://en.wikipedia.org/wiki/Double-precision_floating-point_format) [doubles], which is a format with well-defined operations supported directly on modern CPUs. NaN is a special value in doubles that usually turns up when you do weird math, like divide infinity by a number.
 
-NaN Boxing works by storing data in the unused bits of NaN. By the way, NaN has unused bits. The idea is that every value can be a double. Valid doubles can be read directly and all the other types are NaN, the special double value. And NaN can store the type of a value and store some information about that value. Before I go into further detail it will be helpful to know a little more about how doubles are represented internally.
+NaN Boxing works by storing data in the unused bits of NaN. By the way, NaN has unused bits. The idea is that every value can be a double. Valid doubles can be read directly and all the other types have their data stuffed into those fallow NaN bits I just mentioned. Before I go into further detail it will be helpful to know a little more about how doubles are represented internally.
 
 # The anatomy of a double
 
-A double is an 8 byte (64 bit) representation of a floating point number. Sections of the bits of a double are designated to represent different aspects of the floating point number. I hereby submit my contribution to the already voluminous corpus of illustrations of IEEE 754 standard for representing a double precision floating-point number. Behold! 
+A double is an 8 byte (64 bit) representation of a floating point number. Sections of the bits of a double are designated to represent different aspects of a floating point number. I hereby submit my contribution to the already voluminous corpus of illustrations of IEEE 754 standard for representing a double precision floating-point number. Behold! 
 
 
 <figure class="highlight">
@@ -58,13 +58,13 @@ As you can see from these examples NaN can be encoded in many different ways. An
 
 If the most significant bit of the mantissa is 0, then this is a signaling NaN [sNaN]. IEEE 754 specifies that the CPU may raise an exception if an sNaN is used in certain operations. If the most significant mantissa bit is a 1, wellsir you’ve got yourself a quiet NaN [qNaN].  QNaNs are more common than sNaNs. They are produced when the result of an operation is not a number. And, most importantly for NaN boxing, qNaNs do not raise an exception.
 
-IEEE 754 suggests that the mantissa of a qNaN should, *by means left to the implementer’s discretion*, contain diagnostic information. We can instead use the mantissa to pass around type data and value data. Before I give an example of how one might implement NaN boxing, I am going to provide a motivation for why one might want this solution over others.
+IEEE 754 suggests that the mantissa of a qNaN should, *by means left to the implementer’s discretion*, contain diagnostic information. We will instead use the mantissa to pass around type data and value data. Before I give an example of how one might implement NaN boxing, I am going to provide a motivation for why one might want this solution over others.
 
 All the code examples below are written in C, since that’s the language in which I’m implementing my Lisp. I’m going to assume the reader has a little familiarity with that language and with the concept of [bitmasking](https://en.wikipedia.org/wiki/Mask_(computing)).
 
 # Why would anyone want to touch a NaN’s bits?
 
-In a dynamically typed language type information must be stored as code is parsed. As I mentioned above, one way to do this is by storing type data and value data separately, which implies some kind of structure.  The most efficient such structure is a *tagged union*. Consider an example:
+In a dynamically typed language type information must be stored as code is parsed. As I mentioned above, one way to do this is by storing type data and value data separately, which implies some kind of structure.  The most efficient such structure is a *tagged union*. Consider this example:
 
 ```c
 struct Expression {
@@ -79,15 +79,13 @@ struct Expression {
 
 An *Expression* is a struct with two fields: `type` and `value`. The `value` field is a *union*. A union is a special data type that overlays all its members in one location in memory. The enum `tag` is meant to signal which member of the union is actually stored in the `value` field.  
 
-A *tagged union*, then, is a struct with a feild of type **union** and feild, of type **enum**, meant to signal which member of the union field is being used by this struct.  A float Expression is created like this:
-
+A *tagged union*, then, is a special structure with a `value` field that could have one of several different fixed types and a `tag` field that indicates which type is in use. For instance, a float Expression is created like this:
 ```c
 struct Expression *e = malloc(sizeof Expression);// declare e as a pointer to an Expression, allocate enough heap memory to sore e
 e->tag = TYPE_FLOAT;// tag e as a float
 e->value.as_float = 2.71828;// store a value in e as a float
 ```
 We declare a pointer `e` to an Expression, then tag it as a float, store a value in the appropriate member of the union and then release the Expression back into the wild. Then operations on Expressions can switch on the tag:
-
 ```c
 void print_expression(Expression *e)
 {
@@ -115,7 +113,6 @@ void print_expression(Expression *e)
     }
 }
 ```
-
 Without the tag we wouldn’t be able to print the value safely because we wouldn't know which of the three possible types of data was actually stored at the `value` address.
 
 But this means that every token of a numeric type is tagged and stored which is particularly wasteful when it comes to duplicate values. For a Lisp expression like `(+ 0 0)` I want to be able to read both 0s directly and not have to create two Expressions with the same value. Furthermore, storing structures in random places on the heap means losing [locality of reference](https://en.wikipedia.org/wiki/Locality_of_reference). And that affects speed.
@@ -172,7 +169,7 @@ We need maks for our types:
 #define MASK_INT 0x0001000000000000 //0000000000000001000000000000000000000000000000000000000000000000
 #define MASK_STRING 0x0002000000000000 //0000000000000010000000000000000000000000000000000000000000000000
 ```
-We don’t need a mask for floats because any non-NaN is a float.  We get them for free.
+We don’t need a mask for floats because any non-NaN is a float.  We get them for free!
 
 Decoding is done by functions that take a tagged NaN and use bitwise-and to isolate the payload and cast it to the expected type.
 ```c
@@ -182,7 +179,7 @@ value decode_value(double tagged_nan)//notice this function returns the made up 
 }
 ```
 # Encode and decode ints
-We can store an int directly in the payload. Even though the payload is 48 bits, I am going to use 32 bit ints because these are well defined in IEEE and supported in c.  So we will need a special mask for the 32 bit payload. 
+We can store an int directly in the payload. Even though the payload is 48 bits, I am going to use 32 bit ints because these are well defined in IEEE and supported in C.  So we will need a special mask for the 32 bit payload. 
 ```c
 #define MASK_PAYLOAD_INT 0x00000000ffffffff //0000000000000000000000000000000011111111111111111111111111111111
 ```
@@ -288,6 +285,7 @@ void print_value(double value)// print_expression changed to print_value; *e cha
     }
 }
 ```
+# Other resources
 You can see the complete code here: GITHUB LINK TO COME
 
 

@@ -5,6 +5,12 @@ $flame: #E96838ff;
 $cambridge-blue: #6EA69Dff;
 $indigo-dye: #0B3D64ff;
 
+body{
+    font-family: "Helvetica Neue Bold", sans-serif;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+}
+
 a{
     color: $sandy-brown;
 }
