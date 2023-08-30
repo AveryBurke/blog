@@ -4,17 +4,18 @@ title:  "Dynamic Typing and NaN Boxing"
 date:   2023-08-23
 ---
 
-I’m making a Lisp.  And I'm checking it twice. My Lisp, like most Lisp dialects, is *dynamically-typed*.  There are many ways to define dynamic typing. But for the purposes of this post the following definition will be the most helpful: **in a dynamically-typed language type checking happens at runtime**. Dynamically typed languages benefit from less verbose and more flexible code than their statically typed counterparts. Variables don’t require type declarations and they can be reassigned data of different types at different stages in the same execution scope. And in dynamically typed languages functions can accept and return data of any type.  
+I’m making a Lisp.  And I'm checking it twice. My Lisp, like most Lisp dialects, is *dynamically-typed*.  There are many ways to define dynamic typing. But for the purposes of this post the following definition will be the most helpful: **in a dynamically-typed language type checking happens at runtime**. Dynamically typed languages benefit from more flexible code than their statically typed counterparts. Variables don’t require type declarations and they can be reassigned data of different types, at different stages, in the same execution scope. And in dynamically typed languages functions can accept and return any type of data.
 
-If you type check at runtime you need a way to store type data as tokens are parsed.  The obvious way to store this data is out of band; that is, store both the value data and the type data separately. Then the type and the value need to be linked together with some kind of structure (more on this to follow). But there are drawbacks to storing data this way. As I will explain below,  some values that could otherwise be read directly will end up stored, with type data, in structures, and therefore unnecessarily duplicated. And structures are referenced by pointers and stored in random heap memory, which will certainly lead to [cache misses](https://redis.com/glossary/cache-miss/) and therefore affect speed.  In this post I’ll describe a clever optimization called NaN Boxing that addresses these issues by storing type data and value data together.
+If you type check at runtime you need a way to store type information while the program is being evaluated.  The obvious way to store this information is out of band; that is, store the value and the type information separately. Then the type and the value need to be linked together with some kind of structure (more on this to follow). But there are drawbacks to storing data this way. As I will explain below,  some values that could otherwise be read directly will end up stored, with type information, in structures, and therefore unnecessarily duplicated. Further, the larger these structures are the fewer will fit into the [cache line](https://lemire.me/blog/2022/06/06/data-structure-size-and-cache-line-accesses/), and structures tend to be stored on the heap which will certainly lead to [cache misses](https://redis.com/glossary/cache-miss/). Both of these factors affect speed.  In this post I’ll describe a clever optimization called NaN Boxing that addresses these issues by storing values and type information together.
 
-"NaN" is an abbreviation for "not a number". Most programming languages support [IEEE 754 double precision floating point numbers](https://en.wikipedia.org/wiki/Double-precision_floating-point_format) [doubles], which is a format with well-defined operations supported directly on modern CPUs. NaN is a special value in doubles that usually turns up when you do weird math, like divide infinity by a number.
+"NaN" is an abbreviation for "not a number". Most programming languages support [IEEE 754 double precision floating point numbers](https://en.wikipedia.org/wiki/Double-precision_floating-point_format) (*doubles*), which is a format with well-defined operations supported directly on modern CPUs. NaN is a special value in doubles that usually turns up when you do operations the CPU wasn't prepared for, like getting the square root of -1.
 
-NaN Boxing works by storing data in the unused bits of NaN. By the way, NaN has unused bits. The idea is that every value can be a double. Valid doubles can be read directly and all the other types have their data stuffed into those fallow NaN bits I just mentioned. Before I go into further detail it will be helpful to know a little more about how doubles are represented internally.
+NaN Boxing works by storing data in the unused bits of NaN. By the way, NaN has unused bits. The idea is that every value can be stored in the space of a double. Valid doubles can be read directly and all the other types have their data stuffed into those fallow NaN bits I just mentioned. Before I go into further detail it will be helpful to know a little more about how doubles are represented internally.
+
 
 # The anatomy of a double
 
-A double is an 8 byte (64 bit) representation of a floating point number. Sections of the bits of a double are designated to represent different aspects of a floating point number. I hereby submit my contribution to the already voluminous corpus of illustrations of IEEE 754 standard for representing a double precision floating-point number. Behold! 
+A double is an 8 byte (64 bit) representation of a floating point number. Sections of the bits of a double are designated to represent different aspects of the floating point number. I hereby submit my contribution to the already voluminous corpus of illustrations of IEEE 754 standard for representing a double precision floating-point number. Behold! 
 
 
 <figure class="highlight">
@@ -46,25 +47,26 @@ Some examples of doubles:
     <pre>
     <span><span class="sign">0</span> <span class="exponent">01111111111</span> <span class="mantissa">0000000000000000000000000000000000000000000000000000</span> = 1</span>
     <span><span class="sign">1</span> <span class="exponent">10000000000</span> <span class="mantissa">0000000000000000000000000000000000000000000000000000</span> = -2</span>
-    <span><span class="sign">0</span> <span class="exponent">01111111000</span> <span class="mantissa">1000000000000000000000000000000000000000000000000000</span> = 0.01171875</span>
-    <span><span class="sign">0</span> <span class="exponent">111111111</span> <span class="mantissa">1000000000000000000000000000000000000000000000000000</span> = NaN</span>
-    <span><span class="sign">0</span> <span class="exponent">111111111</span> <span class="mantissa">0000000000000000100000000000000000100000000000000000</span> = NaN</span>
-    <span><span class="sign">1</span> <span class="exponent">111111111</span> <span class="mantissa">1111100000000000000000000000000000000000000000000000</span> = NaN</span>
+    <span><span class="sign">0</span> <span class="exponent">01111111000</span> <span class="mantissa">0101101111110000101010000111010000100111111100000001</span> = 2.7182818</span>
+    <span><span class="sign">0</span> <span class="exponent">11111111111</span> <span class="mantissa">1000000000000000000000000000000000000000000000000000</span> = NaN</span>
+    <span><span class="sign">0</span> <span class="exponent">11111111111</span> <span class="mantissa">1000000000000000100000000000000000100000000000000000</span> = NaN</span>
+    <span><span class="sign">1</span> <span class="exponent">11111111111</span> <span class="mantissa">0101101111110000101010000111010000100111111100000001</span> = NaN</span>
 </pre>
 </figure>
 
 
-As you can see from these examples NaN can be encoded in many different ways. Any double whose exponent bits are all 1s is treated as Not a Number. But there are actually two types of NaNs.
+As you can see from the last three examples NaN can be encoded in many different ways. Any double whose exponent bits are all 1s is treated as Not a Number.
 
-If the most significant bit of the mantissa is 0, then this is a signaling NaN [sNaN]. IEEE 754 specifies that the CPU may raise an exception if an sNaN is used in certain operations. If the most significant mantissa bit is a 1, wellsir you’ve got yourself a quiet NaN [qNaN].  QNaNs are more common than sNaNs. They are produced when the result of an operation is not a number. And, most importantly for NaN boxing, qNaNs do not raise an exception.
+There are actually two kinds of NaNs.  If the most significant bit of the mantissa is 0, then this is a signaling NaN [sNaN]. IEEE 754 specifies that the CPU may [raise an exception](https://www.geeksforgeeks.org/interrupts-and-exceptions/) if an sNaN is used in certain operations. If the most significant mantissa bit is a 1, wellsir you’ve got yourself a quiet NaN [qNaN].  qNaNs are produced when the result of an operation is not a number. And, most importantly for NaN boxing, qNaNs do not raise an exception, so we are free to (ab)use them without causing our program to crash.
 
-IEEE 754 suggests that the mantissa of a qNaN should, *by means left to the implementer’s discretion*, contain diagnostic information. We will instead use the mantissa to pass around type data and value data. Before I give an example of how one might implement NaN boxing, I am going to provide a motivation for why one might want this solution over others.
+IEEE 754 suggests that the mantissa of a qNaN should, by means left to the implementer’s discretion, contain diagnostic information. We can instead use the mantissa to pass around our type and value information.
 
-All the code examples below are written in C, since that’s the language in which I’m implementing my Lisp. I’m going to assume the reader has a little familiarity with that language and with the concept of [bitmasking](https://en.wikipedia.org/wiki/Mask_(computing)).
+All the code examples below are written in C, since that’s the language in which I’m implementing my Lisp. I’m going to assume the reader has a little familiarity with that language and with the concept of [bitmasking](https://en.wikipedia.org/wiki/Mask_(computing))
+
 
 # Why would anyone want to touch a NaN’s bits?
 
-In a dynamically typed language type information must be stored as code is parsed. As I mentioned above, one way to do this is by storing type data and value data separately, which implies some kind of structure.  The most efficient such structure is a *tagged union*. Consider this example:
+One way to store type information and values together is to use a *tagged union*. Consider the following example:
 
 ```c
 struct Expression {
@@ -115,7 +117,9 @@ void print_expression(Expression *e)
 ```
 Without the tag we wouldn’t be able to print the value safely because we wouldn't know which of the three possible types of data was actually stored at the `value` address.
 
-But this means that every token of a numeric type is tagged and stored which is particularly wasteful when it comes to duplicate values. For a Lisp expression like `(+ 0 0)` I want to be able to read both 0s directly and not have to create two Expressions with the same value. Furthermore, storing structures in random places on the heap means losing [locality of reference](https://en.wikipedia.org/wiki/Locality_of_reference). And that affects speed.
+But this means that every token of a numeric type is tagged and stored which is particularly wasteful when it comes to duplicate values. For a Lisp expression like `(+ 0 0)` I want to be able to read both 0s directly and not have to create two Expressions with the same value. Furthermore, the tagged union I propose above will be larger than a NaN 
+
+storing structures in random places on the heap means losing [locality of reference](https://en.wikipedia.org/wiki/Locality_of_reference). And that affects speed.
 
 NaN boxing addresses these issues and you get the illicit thrill of breaking IEEE protocol!
 
@@ -243,19 +247,20 @@ Then we can use it in a helper function that takes an encoded value and returns 
 ```c
 Tag get_type(double value)
 {
-    uint64_t punned = *(uint64_t *)&value
-     /* if the value is NOT a NaN, then it is a float */
-    If ((~punned & MASK_EXPONENT) != 0)) { return TYPE_FLOAT; }
-    uint64_t tag = punned & MASK_TAG;
-    switch(tag)
-       {
-	case TAG_INT :
-	   return TYPE_INT;
-  	case TAG_STRING :
-	   return TYPE_STRING;
-       }
-      return  TYPE_ERROR; // this is where the new error type comes in handy
-   }
+  uint64_t converted = *(uint64_t *)&value;
+  uint64_t type = converted & MASK_TAG;
+  /* if the value is NOT NaN then it is a float*/
+  if ((~converted & MASK_EXPONENT) != 0)
+    return TYPE_FLOAT;
+  switch (type)
+  {
+  case (MASK_QNAN | MASK_INT):
+    return TYPE_INT;
+  case (MASK_QNAN | MASK_STRING):
+    return TYPE_STRING;
+  }
+  return TYPE_ERROR;//this is where the new error type comes in handy
+}
 ```
 Finally, our previous print function only needs some slight adjustments:
 ```c
@@ -285,8 +290,15 @@ void print_value(double value)// print_expression changed to print_value; *e cha
     }
 }
 ```
-# Other resources
-You can see the complete code here: GITHUB LINK TO COME
+# Further Reading
+
+[See the code](https://github.com/AveryBurke/nan_boxing)
+
+I’m working on this lisp during my time at the [Recurse Center](https://www.recurse.com/) and, as seems to happen to me quite often, I just discovered that another Recurser got to this topic before I did. So for a much more thorough treatment see [The Secret Life of NaN, by Annie Cherkaev](https://anniecherkaev.com/the-secret-life-of-nan)
+
+Robert Nystrom has a section on NaN boxing in the [final chapter of Crafting Interpreters](https://craftinginterpreters.com/optimization.html)
+
+I first came across this topic while reading [this article](https://github.com/Robert-van-Engelen/tinylisp/blob/main/tinylisp.pdf)
 
 
 
